@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option java_package = "com.codelab.android.datastore";
+option java_multiple_files = true;
+
+message UserPreferences {
+  bool show_completed = 1;
+
+  enum SortOrder {
+    UNSPECIFIED = 0;
+    NONE = 1;
+    BY_DEADLINE = 2;
+    BY_PRIORITY = 3;
+    BY_DEADLINE_AND_PRIORITY = 4;
+  }
+
+  SortOrder sort_order = 2;
+}

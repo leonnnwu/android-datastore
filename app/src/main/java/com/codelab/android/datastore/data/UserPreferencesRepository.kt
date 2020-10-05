@@ -19,60 +19,62 @@ package com.codelab.android.datastore.data
 import android.content.Context
 import androidx.core.content.edit
 import androidx.datastore.DataStore
-import androidx.datastore.preferences.*
+import androidx.datastore.createDataStore
+import androidx.datastore.migrations.SharedPreferencesMigration
+import androidx.datastore.migrations.SharedPreferencesView
+import com.codelab.android.datastore.UserPreferences
+import com.codelab.android.datastore.UserPreferences.SortOrder
 import kotlinx.coroutines.flow.*
 import java.io.IOException
 
 private const val USER_PREFERENCES_NAME = "user_preferences"
 private const val SORT_ORDER_KEY = "sort_order"
 
-enum class SortOrder {
-    NONE,
-    BY_DEADLINE,
-    BY_PRIORITY,
-    BY_DEADLINE_AND_PRIORITY
-}
-
 /**
  * Class that handles saving and retrieving user preferences
  */
 class UserPreferencesRepository(context: Context) {
 
-    private val dataStore: DataStore<Preferences> =
-        context.createDataStore(
-            name = "user",
-            migrations = listOf(SharedPreferencesMigration(context, USER_PREFERENCES_NAME))
-        )
-
-    private object PreferencesKeys {
-        val SHOW_COMPLETED = preferencesKey<Boolean>("show_completed")
-        val SORT_ORDER = preferencesKey<String>("sort_order")
+    private val sharedPrefsMigration = SharedPreferencesMigration(
+        context,
+        USER_PREFERENCES_NAME
+    ) { sharedPrefs: SharedPreferencesView, currentData: UserPreferences ->
+        if (currentData.sortOrder == SortOrder.UNSPECIFIED) {
+            currentData.toBuilder().setSortOrder(
+                SortOrder.valueOf(
+                    sharedPrefs.getString(SORT_ORDER_KEY, SortOrder.NONE.name)!!
+                )
+            ).build()
+        } else {
+            currentData
+        }
     }
+
+    private val dataStore: DataStore<UserPreferences> =
+        context.createDataStore(
+            fileName = "user_prefs.pb",
+            serializer = UserPreferencesSerializer,
+            migrations = listOf(sharedPrefsMigration)
+        )
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
-                emit(emptyPreferences())
+                emit(UserPreferences.getDefaultInstance())
             } else {
                 throw exception
             }
         }
-        .map { preferences ->
-            val showCompleted = preferences[PreferencesKeys.SHOW_COMPLETED] ?: false
-            val sortOrder = SortOrder.valueOf(preferences[PreferencesKeys.SORT_ORDER] ?: SortOrder.NONE.name)
-            UserPreferences(showCompleted, sortOrder)
-        }
 
     suspend fun updateShowCompleted(showCompleted: Boolean) {
-        dataStore.edit { preferences ->
-            preferences[PreferencesKeys.SHOW_COMPLETED] = showCompleted
+        dataStore.updateData { preferences ->
+            preferences.toBuilder().setShowCompleted(showCompleted).build()
         }
     }
 
     suspend fun enableSortByDeadline(enable: Boolean) {
-        dataStore.edit { preferences ->
-            val currentOrder = SortOrder.valueOf(preferences[PreferencesKeys.SORT_ORDER] ?: SortOrder.NONE.name)
-
+        dataStore.updateData { preferences ->
+            val currentOrder = preferences.sortOrder
             val newSortOrder =
                 if (enable) {
                     if (currentOrder == SortOrder.BY_PRIORITY) {
@@ -87,14 +89,14 @@ class UserPreferencesRepository(context: Context) {
                         SortOrder.NONE
                     }
                 }
-            preferences[PreferencesKeys.SORT_ORDER] = newSortOrder.name
+            preferences.toBuilder().setSortOrder(newSortOrder).build()
         }
 
     }
 
     suspend fun enableSortByPriority(enable: Boolean) {
-        dataStore.edit { preferences ->
-            val currentOrder = SortOrder.valueOf(preferences[PreferencesKeys.SORT_ORDER] ?: SortOrder.NONE.name)
+        dataStore.updateData { preferences ->
+            val currentOrder = preferences.sortOrder
 
             val newSortOrder =
                 if (enable) {
@@ -110,7 +112,7 @@ class UserPreferencesRepository(context: Context) {
                         SortOrder.NONE
                     }
                 }
-            preferences[PreferencesKeys.SORT_ORDER] = newSortOrder.name
+            preferences.toBuilder().setSortOrder(newSortOrder).build()
         }
     }
 }

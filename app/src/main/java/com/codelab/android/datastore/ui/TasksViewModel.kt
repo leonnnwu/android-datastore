@@ -20,15 +20,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
+import com.codelab.android.datastore.UserPreferences
 import com.codelab.android.datastore.data.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.lang.UnsupportedOperationException
 
 data class TasksUiModel(
     val tasks: List<Task>,
     val showCompleted: Boolean,
-    val sortOrder: SortOrder
+    val sortOrder: UserPreferences.SortOrder
 )
 
 // MutableStateFlow is an experimental API so we're annotating the class accordingly
@@ -56,7 +58,7 @@ class TasksViewModel(
     private fun filterSortTasks(
         tasks: List<Task>,
         showCompleted: Boolean,
-        sortOrder: SortOrder
+        sortOrder: UserPreferences.SortOrder
     ): List<Task> {
         // filter the tasks
         val filteredTasks = if (showCompleted) {
@@ -66,12 +68,13 @@ class TasksViewModel(
         }
         // sort the tasks
         return when (sortOrder) {
-            SortOrder.NONE -> filteredTasks
-            SortOrder.BY_DEADLINE -> filteredTasks.sortedByDescending { it.deadline }
-            SortOrder.BY_PRIORITY -> filteredTasks.sortedBy { it.priority }
-            SortOrder.BY_DEADLINE_AND_PRIORITY -> filteredTasks.sortedWith(
+            UserPreferences.SortOrder.UNSPECIFIED, UserPreferences.SortOrder.NONE -> filteredTasks
+            UserPreferences.SortOrder.BY_DEADLINE -> filteredTasks.sortedByDescending { it.deadline }
+            UserPreferences.SortOrder.BY_PRIORITY -> filteredTasks.sortedBy { it.priority }
+            UserPreferences.SortOrder.BY_DEADLINE_AND_PRIORITY -> filteredTasks.sortedWith(
                 compareByDescending<Task> { it.deadline }.thenBy { it.priority }
             )
+            else -> throw UnsupportedOperationException("$sortOrder not supported")
         }
     }
 
